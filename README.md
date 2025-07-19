@@ -1,0 +1,2 @@
+ - contracts folder: definition of what each agent is capable of and how they should behave
+    - blueprint.json: architecture for AI to follow

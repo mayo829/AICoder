@@ -1,0 +1,8 @@
+{
+    "name": "Planner",
+    "path": "agents.planner",
+    "entrypoint": "planner_node",
+    "description": "Creates a task plan from user input",
+    "allowed_actions": ["decompose_tasks"]
+}
+  
