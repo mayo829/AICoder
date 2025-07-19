@@ -6,19 +6,13 @@ and specifications provided by other agents in the system.
 """
 
 from typing import Dict, Any, List
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_openai import ChatOpenAI
 import logging
+from services.llm import generate_agent_response
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Initialize the LLM
-llm = ChatOpenAI(
-    model="gpt-4-turbo-preview",
-    temperature=0.1,
-    max_tokens=4000
-)
+# LLM service is imported and used via generate_agent_response function
 
 def coder_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -56,11 +50,8 @@ def coder_node(state: Dict[str, Any]) -> Dict[str, Any]:
         Return only the code without explanations.
         """
         
-        # Generate code using LLM
-        messages = [HumanMessage(content=prompt)]
-        response = llm.invoke(messages)
-        
-        generated_code = response.content
+        # Generate code using centralized LLM service
+        generated_code = generate_agent_response("coder", prompt)
         
         # Update state with generated code
         updated_state = state.copy()

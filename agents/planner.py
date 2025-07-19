@@ -7,20 +7,14 @@ and architecture to follow while maintaining flexibility.
 """
 
 from typing import Dict, Any, List
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_openai import ChatOpenAI
 import logging
 import json
+from services.llm import generate_agent_response
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Initialize the LLM
-llm = ChatOpenAI(
-    model="gpt-4-turbo-preview",
-    temperature=0.2,
-    max_tokens=4000
-)
+# LLM service is imported and used via generate_agent_response function
 
 def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -60,11 +54,8 @@ def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
         Format your response as a structured plan that can be easily parsed and followed by other agents.
         """
         
-        # Generate plan using LLM
-        messages = [HumanMessage(content=prompt)]
-        response = llm.invoke(messages)
-        
-        plan_content = response.content
+        # Generate plan using centralized LLM service
+        plan_content = generate_agent_response("planner", prompt)
         
         # Parse and structure the plan
         structured_plan = parse_plan(plan_content)

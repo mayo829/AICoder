@@ -7,8 +7,6 @@ common development tasks.
 """
 
 from typing import Dict, Any, List, Optional, Union
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_openai import ChatOpenAI
 import logging
 import os
 import json
@@ -22,16 +20,12 @@ import hashlib
 import zipfile
 import requests
 from urllib.parse import urlparse
+from services.llm import generate_agent_response
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Initialize the LLM
-llm = ChatOpenAI(
-    model="gpt-4-turbo-preview",
-    temperature=0.1,
-    max_tokens=2000
-)
+# LLM service is imported and used via generate_agent_response function
 
 class FileManager:
     """Handles file operations and management"""
@@ -227,7 +221,7 @@ class CodeAnalyzer:
     
     def analyze_code_structure(self, code: str, language: str = "python") -> Dict[str, Any]:
         """
-        Analyze the structure of code.
+        Analyze the structure of code with LLM enhancement.
         
         Args:
             code: Code to analyze
@@ -237,6 +231,7 @@ class CodeAnalyzer:
             Code structure analysis
         """
         try:
+            # Basic analysis
             analysis = {
                 "language": language,
                 "lines": len(code.split('\n')),
@@ -255,11 +250,52 @@ class CodeAnalyzer:
             elif language == "java":
                 analysis.update(self._analyze_java(code))
             
+            # Enhanced analysis using LLM
+            enhanced_analysis = self._get_enhanced_analysis(code, language, analysis)
+            analysis.update(enhanced_analysis)
+            
             return analysis
             
         except Exception as e:
             logger.error(f"Error analyzing code structure: {str(e)}")
             return {"error": str(e)}
+    
+    def _get_enhanced_analysis(self, code: str, language: str, basic_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Get enhanced analysis using LLM"""
+        try:
+            prompt = f"""
+            Analyze the following {language} code and provide detailed insights:
+            
+            Code:
+            {code}
+            
+            Basic Analysis:
+            - Lines: {basic_analysis.get('lines', 0)}
+            - Functions: {basic_analysis.get('function_count', 0)}
+            - Classes: {basic_analysis.get('class_count', 0)}
+            - Imports: {basic_analysis.get('imports', [])}
+            
+            Please provide:
+            1. Code quality assessment (1-10 scale)
+            2. Potential improvements and suggestions
+            3. Best practices recommendations
+            4. Security considerations
+            5. Performance insights
+            6. Maintainability score (1-10 scale)
+            
+            Format your response as a structured analysis with clear sections.
+            """
+            
+            llm_analysis = generate_agent_response("toolbox", prompt)
+            
+            return {
+                "llm_analysis": llm_analysis,
+                "enhanced_insights": True
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in enhanced analysis: {str(e)}")
+            return {"enhanced_insights": False, "error": str(e)}
     
     def _analyze_python(self, code: str) -> Dict[str, Any]:
         """Analyze Python code structure"""
@@ -311,7 +347,7 @@ class CodeAnalyzer:
     
     def format_code(self, code: str, language: str = "python") -> Dict[str, Any]:
         """
-        Format code according to language conventions.
+        Format code according to language conventions with LLM enhancement.
         
         Args:
             code: Code to format
@@ -321,15 +357,49 @@ class CodeAnalyzer:
             Formatted code
         """
         try:
+            # Try standard formatting first
             if language == "python":
-                return self._format_python(code)
+                result = self._format_python(code)
             elif language in ["javascript", "typescript"]:
-                return self._format_javascript(code)
+                result = self._format_javascript(code)
             else:
-                return {"success": False, "error": f"Language {language} not supported for formatting"}
+                result = {"success": False, "error": f"Language {language} not supported for formatting"}
+            
+            # If standard formatting fails, try LLM formatting
+            if not result.get("success", False):
+                llm_result = self._format_with_llm(code, language)
+                if llm_result.get("success", False):
+                    return llm_result
+            
+            return result
                 
         except Exception as e:
             logger.error(f"Error formatting code: {str(e)}")
+            return {"success": False, "error": str(e)}
+    
+    def _format_with_llm(self, code: str, language: str) -> Dict[str, Any]:
+        """Format code using LLM when standard tools fail"""
+        try:
+            prompt = f"""
+            Format the following {language} code according to best practices and language conventions.
+            Ensure proper indentation, spacing, and code style.
+            
+            Original Code:
+            {code}
+            
+            Please return only the formatted code without any explanations or comments.
+            """
+            
+            formatted_code = generate_agent_response("toolbox", prompt)
+            
+            return {
+                "success": True,
+                "formatted_code": formatted_code,
+                "method": "llm"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in LLM formatting: {str(e)}")
             return {"success": False, "error": str(e)}
     
     def _format_python(self, code: str) -> Dict[str, Any]:

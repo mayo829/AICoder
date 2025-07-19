@@ -6,8 +6,6 @@ checks for errors, validates code quality, and provides feedback on deployment r
 """
 
 from typing import Dict, Any, List, Optional
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_openai import ChatOpenAI
 import logging
 import subprocess
 import tempfile
@@ -15,16 +13,12 @@ import os
 import json
 import re
 from pathlib import Path
+from services.llm import generate_agent_response
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Initialize the LLM
-llm = ChatOpenAI(
-    model="gpt-4-turbo-preview",
-    temperature=0.1,
-    max_tokens=2000
-)
+# LLM service is imported and used via generate_agent_response function
 
 class TestRunner:
     """Handles test execution and validation"""
@@ -447,7 +441,7 @@ def calculate_overall_status(test_results: Dict[str, Any]) -> tuple[str, float]:
 
 def generate_test_recommendations(test_results: Dict[str, Any], requirements: str) -> List[str]:
     """
-    Generate recommendations based on test results.
+    Generate recommendations based on test results using LLM service.
     
     Args:
         test_results: Test results
@@ -455,6 +449,91 @@ def generate_test_recommendations(test_results: Dict[str, Any], requirements: st
         
     Returns:
         List of recommendations
+    """
+    try:
+        # Build context for LLM
+        context = {
+            "test_results": test_results,
+            "requirements": requirements,
+            "overall_status": test_results.get("overall_status", "fail"),
+            "score": test_results.get("score", 0.0)
+        }
+        
+        # Create prompt for LLM
+        prompt = f"""
+        Based on the following test results, provide specific, actionable recommendations for improving the code:
+        
+        Test Results Summary:
+        - Overall Status: {test_results.get('overall_status', 'fail')}
+        - Overall Score: {test_results.get('score', 0.0):.2f}
+        - Syntax Check: {'PASS' if test_results.get('syntax_check', {}).get('is_valid', False) else 'FAIL'}
+        - Code Quality Score: {test_results.get('code_quality', {}).get('score', 0.0):.2f}
+        - Security Analysis: {'SECURE' if test_results.get('security_analysis', {}).get('is_secure', False) else 'INSECURE'}
+        - Performance Check: {'PASS' if test_results.get('performance_check', {}).get('is_performant', False) else 'FAIL'}
+        - Deployment Readiness: {test_results.get('deployment_check', {}).get('readiness_score', 0.0):.2f}
+        
+        Requirements: {requirements}
+        
+        Please provide 3-5 specific, actionable recommendations to improve the code quality, security, and deployment readiness. Focus on the most critical issues first.
+        """
+        
+        # Generate recommendations using centralized LLM service
+        llm_response = generate_agent_response("tester", prompt, context=context)
+        
+        # Parse the response into a list of recommendations
+        recommendations = parse_recommendations(llm_response)
+        
+        # Add fallback recommendations if LLM fails
+        if not recommendations:
+            recommendations = generate_fallback_recommendations(test_results)
+        
+        return recommendations
+        
+    except Exception as e:
+        logger.error(f"Error generating LLM recommendations: {str(e)}")
+        # Fallback to basic recommendations
+        return generate_fallback_recommendations(test_results)
+
+def parse_recommendations(llm_response: str) -> List[str]:
+    """
+    Parse LLM response into structured recommendations.
+    
+    Args:
+        llm_response: Raw response from LLM
+        
+    Returns:
+        List of recommendations
+    """
+    recommendations = []
+    
+    # Split by common list indicators
+    lines = llm_response.split('\n')
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Remove common list prefixes
+        for prefix in ['- ', '* ', '1. ', '2. ', '3. ', '4. ', '5. ', '• ']:
+            if line.startswith(prefix):
+                line = line[len(prefix):]
+                break
+        
+        # Add non-empty recommendations
+        if line and len(line) > 10:  # Minimum meaningful length
+            recommendations.append(line)
+    
+    return recommendations[:5]  # Limit to 5 recommendations
+
+def generate_fallback_recommendations(test_results: Dict[str, Any]) -> List[str]:
+    """
+    Generate basic recommendations as fallback.
+    
+    Args:
+        test_results: Test results
+        
+    Returns:
+        List of basic recommendations
     """
     recommendations = []
     

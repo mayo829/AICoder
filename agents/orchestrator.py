@@ -7,30 +7,25 @@ and overall project execution flow.
 """
 
 from typing import Dict, Any, List, Callable
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_openai import ChatOpenAI
 import logging
 import asyncio
 from enum import Enum
+from services.llm import generate_agent_response
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Initialize the LLM
-llm = ChatOpenAI(
-    model="gpt-4-turbo-preview",
-    temperature=0.1,
-    max_tokens=2000
-)
+# LLM service is imported and used via generate_agent_response function
 
 class WorkflowStatus(Enum):
     """Enumeration for workflow status"""
     INITIALIZED = "initialized"
     PLANNING = "planning"
+    ENHANCING = "enhancing"
     CODING = "coding"
     TESTING = "testing"
-    ENHANCING = "enhancing"
     COMPLETED = "completed"
+    DEPLOYING = "deploying"
     FAILED = "failed"
     PAUSED = "paused"
 
@@ -62,7 +57,7 @@ def orchestrator_node(state: Dict[str, Any]) -> Dict[str, Any]:
         # Add workflow metadata
         updated_state["workflow_metadata"] = {
             "current_step": next_action["step"],
-            "total_steps": 6,  # planner, coder, tester, enhancer, memory, toolbox
+            "total_steps": 6,  # planner, enhancer, coder, tester, memory, toolbox
             "progress": calculate_progress(current_status),
             "estimated_completion": estimate_completion_time(state)
         }
@@ -105,10 +100,10 @@ def determine_next_action(current_status: str, state: Dict[str, Any]) -> Dict[st
         # Check if planning is complete
         if agent_results.get("planner", {}).get("planning_status") == "completed":
             return {
-                "status": WorkflowStatus.CODING.value,
-                "agent": "coder",
+                "status": WorkflowStatus.ENHANCING.value,
+                "agent": "enhancer",
                 "step": 2,
-                "notes": "Planning complete, proceeding to code generation"
+                "notes": "Planning complete, proceeding to prompt enhancement"
             }
         else:
             return {
@@ -117,7 +112,24 @@ def determine_next_action(current_status: str, state: Dict[str, Any]) -> Dict[st
                 "step": 1,
                 "notes": "Continuing planning phase"
             }
-    
+
+    elif current_status == WorkflowStatus.ENHANCING.value:
+        # Check if enhancement is complete
+        if agent_results.get("enhancer", {}).get("enhancement_status") == "completed":
+            return {
+                "status": WorkflowStatus.CODING.value,
+                "agent": "coder",
+                "step": 3,
+                "notes": "Prompt enhancement complete, proceeding to code generation"
+            }
+        else:
+            return {
+                "status": WorkflowStatus.ENHANCING.value,
+                "agent": "enhancer",
+                "step": 2,
+                "notes": "Continuing prompt enhancement phase"
+            }
+
     elif current_status == WorkflowStatus.CODING.value:
         # Check if coding is complete
         if agent_results.get("coder", {}).get("code_generation_status") == "completed":

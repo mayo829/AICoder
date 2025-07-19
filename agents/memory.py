@@ -7,23 +7,17 @@ memory storage and retrieval for context-aware decision making.
 """
 
 from typing import Dict, Any, List, Optional
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_openai import ChatOpenAI
 import logging
 import json
 import hashlib
 from datetime import datetime, timedelta
 import os
+from services.llm import generate_agent_response
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Initialize the LLM
-llm = ChatOpenAI(
-    model="gpt-4-turbo-preview",
-    temperature=0.1,
-    max_tokens=2000
-)
+# LLM service is imported and used via generate_agent_response function
 
 class MemoryManager:
     """Manages persistent memory storage and retrieval"""
@@ -155,13 +149,13 @@ def retrieve_relevant_context(memory_manager: MemoryManager, user_input: str, cu
         # Load memory
         memory_data = memory_manager.load_memory()
         
-        # Build search query
-        search_query = f"{user_input} {current_context}"
+        # Use LLM to enhance context retrieval
+        enhanced_context = enhance_context_retrieval(user_input, current_context, memory_data)
         
-        # Find relevant memories
+        # Find relevant memories with enhanced understanding
         relevant_memories = []
         for memory in memory_data.get("memories", []):
-            relevance_score = calculate_relevance(memory, search_query)
+            relevance_score = calculate_enhanced_relevance(memory, enhanced_context)
             if relevance_score > 0.3:  # Threshold for relevance
                 memory["relevance_score"] = relevance_score
                 relevant_memories.append(memory)
@@ -175,6 +169,90 @@ def retrieve_relevant_context(memory_manager: MemoryManager, user_input: str, cu
     except Exception as e:
         logger.error(f"Error retrieving context: {str(e)}")
         return []
+
+def enhance_context_retrieval(user_input: str, current_context: str, memory_data: Dict[str, Any]) -> str:
+    """
+    Use LLM to enhance context retrieval by understanding semantic relationships.
+    
+    Args:
+        user_input: Current user input
+        current_context: Current context
+        memory_data: All memory data
+        
+    Returns:
+        Enhanced context understanding
+    """
+    try:
+        # Create a summary of available memories for LLM analysis
+        memory_summary = "Available memory entries:\n"
+        for i, memory in enumerate(memory_data.get("memories", [])[:20]):  # Limit to recent 20
+            memory_summary += f"{i+1}. {memory.get('user_input', '')[:100]}... (Tags: {', '.join(memory.get('tags', []))})\n"
+        
+        prompt = f"""
+        Analyze the current user input and context to identify what type of information would be most relevant from the available memory entries.
+        
+        Current User Input: {user_input}
+        Current Context: {current_context}
+        
+        {memory_summary}
+        
+        Based on this analysis, what are the key concepts, technologies, or patterns that should be considered when retrieving relevant context? Focus on semantic relationships rather than just keyword matching.
+        """
+        
+        # Get enhanced understanding from LLM
+        enhanced_understanding = generate_agent_response("memory", prompt)
+        
+        return f"{user_input} {current_context} {enhanced_understanding}"
+        
+    except Exception as e:
+        logger.error(f"Error enhancing context retrieval: {str(e)}")
+        return f"{user_input} {current_context}"
+
+def calculate_enhanced_relevance(memory: Dict[str, Any], enhanced_context: str) -> float:
+    """
+    Calculate enhanced relevance score using LLM understanding.
+    
+    Args:
+        memory: Memory entry
+        enhanced_context: Enhanced context understanding
+        
+    Returns:
+        Enhanced relevance score (0.0 to 1.0)
+    """
+    try:
+        # Use LLM to calculate semantic relevance
+        prompt = f"""
+        Calculate the relevance between the current context and a memory entry.
+        
+        Current Context: {enhanced_context}
+        Memory Entry: {memory.get('user_input', '')} - {memory.get('context', '')}
+        Memory Tags: {', '.join(memory.get('tags', []))}
+        
+        Rate the relevance from 0.0 to 1.0, where:
+        - 0.0 = Completely irrelevant
+        - 0.5 = Somewhat related
+        - 1.0 = Highly relevant
+        
+        Consider semantic relationships, not just keyword matches.
+        Return only the numerical score.
+        """
+        
+        try:
+            relevance_response = generate_agent_response("memory", prompt)
+            # Try to extract numerical score from response
+            import re
+            score_match = re.search(r'0\.\d+|1\.0', relevance_response)
+            if score_match:
+                return float(score_match.group())
+        except:
+            pass
+        
+        # Fallback to keyword-based relevance
+        return calculate_relevance(memory, enhanced_context)
+        
+    except Exception as e:
+        logger.error(f"Error calculating enhanced relevance: {str(e)}")
+        return calculate_relevance(memory, enhanced_context)
 
 def calculate_relevance(memory: Dict[str, Any], search_query: str) -> float:
     """

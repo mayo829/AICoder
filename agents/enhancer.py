@@ -7,22 +7,16 @@ context, and optimizes prompts for better results.
 """
 
 from typing import Dict, Any, List, Optional
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_openai import ChatOpenAI
 import logging
 import re
 import json
 from datetime import datetime
+from services.llm import generate_agent_response
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Initialize the LLM
-llm = ChatOpenAI(
-    model="gpt-4-turbo-preview",
-    temperature=0.2,
-    max_tokens=2000
-)
+# LLM service is imported and used via generate_agent_response function
 
 class PromptEnhancer:
     """Handles prompt enhancement and optimization"""
@@ -178,11 +172,8 @@ class PromptEnhancer:
             Return only the enhanced prompt without explanations.
             """
             
-            # Generate enhanced prompt using LLM
-            messages = [HumanMessage(content=enhancement_prompt)]
-            response = llm.invoke(messages)
-            
-            enhanced_prompt = response.content.strip()
+            # Generate enhanced prompt using centralized LLM service
+            enhanced_prompt = generate_agent_response("enhancer", enhancement_prompt).strip()
             
             # Fallback if LLM fails
             if not enhanced_prompt or enhanced_prompt == original_prompt:
@@ -496,10 +487,7 @@ def improve_user_feedback(user_feedback: str, context: Dict[str, Any]) -> str:
         Return only the improved feedback.
         """
         
-        messages = [HumanMessage(content=improvement_prompt)]
-        response = llm.invoke(messages)
-        
-        return response.content.strip()
+        return generate_agent_response("enhancer", improvement_prompt).strip()
         
     except Exception as e:
         logger.error(f"Error improving user feedback: {str(e)}")
