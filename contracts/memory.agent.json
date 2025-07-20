@@ -1,0 +1,42 @@
+{
+    "name": "Memory",
+    "path": "agents.memory",
+    "entrypoint": "memory_node",
+    "description": "Manages long-term memory, context preservation, and knowledge retrieval across workflow sessions",
+    "capabilities": [
+        "context_storage",
+        "knowledge_retrieval",
+        "session_persistence",
+        "pattern_recognition",
+        "learning_adaptation"
+    ],
+    "inputs": {
+        "current_context": "object",
+        "query": "string",
+        "new_information": "object",
+        "session_id": "string"
+    },
+    "outputs": {
+        "retrieved_context": "object",
+        "relevant_memories": "array",
+        "updated_knowledge": "object",
+        "learning_insights": "array"
+    },
+    "allowed_actions": [
+        "store_context",
+        "retrieve_memory",
+        "update_knowledge",
+        "analyze_patterns"
+    ],
+    "dependencies": [],
+    "storage_backends": ["file", "database", "vector_store"],
+    "memory_types": {
+        "short_term": "session_context",
+        "long_term": "project_knowledge",
+        "episodic": "workflow_history"
+    },
+    "error_handling": {
+        "retry_attempts": 3,
+        "fallback_agent": "orchestrator"
+    }
+}

@@ -16,6 +16,16 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("✅ Loaded environment variables from .env file")
+except ImportError:
+    print("⚠️  python-dotenv not available, using system environment variables")
+except Exception as e:
+    print(f"⚠️  Error loading .env file: {e}")
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -56,7 +66,7 @@ class OpenAIService(BaseLLMService):
             model=config.model,
             temperature=config.temperature,
             max_tokens=config.max_tokens,
-            api_key=config.api_key or os.getenv("OPENAI_API_KEY"),
+            api_key=os.getenv("OPENAI_API_KEY"),
             base_url=config.base_url,
             timeout=config.timeout
         )
@@ -127,7 +137,20 @@ class LLMServiceManager:
     def _initialize_default_services(self):
         """Initialize ChatGPT and Claude services based on environment"""
         try:
-            # Try OpenAI first
+            # Try Claude Sonnet first (preferred for code generation)
+            if os.getenv("ANTHROPIC_API_KEY"):
+                anthropic_config = LLMConfig(
+                    provider=LLMProvider.ANTHROPIC,
+                    model="claude-3-5-sonnet-20241022",
+                    temperature=0.1,
+                    max_tokens=4000
+                )
+                self.add_service("anthropic", AnthropicService(anthropic_config))
+                self.default_service = "anthropic"
+                self.fallback_chain.append("anthropic")
+                print("✅ Claude Sonnet 3.5 configured as primary LLM service")
+            
+            # Try OpenAI as fallback
             if os.getenv("OPENAI_API_KEY"):
                 openai_config = LLMConfig(
                     provider=LLMProvider.OPENAI,
@@ -136,21 +159,10 @@ class LLMServiceManager:
                     max_tokens=4000
                 )
                 self.add_service("openai", OpenAIService(openai_config))
-                self.default_service = "openai"
-                self.fallback_chain.append("openai")
-            
-            # Try Claude as fallback
-            if os.getenv("ANTHROPIC_API_KEY"):
-                anthropic_config = LLMConfig(
-                    provider=LLMProvider.ANTHROPIC,
-                    model="claude-3-sonnet-20240229",
-                    temperature=0.1,
-                    max_tokens=4000
-                )
-                self.add_service("anthropic", AnthropicService(anthropic_config))
                 if not self.default_service:
-                    self.default_service = "anthropic"
-                self.fallback_chain.append("anthropic")
+                    self.default_service = "openai"
+                self.fallback_chain.append("openai")
+                print("✅ OpenAI configured as fallback LLM service")
             
 
             
@@ -199,7 +211,10 @@ class LLMServiceManager:
             service = self.get_service(service_name)
             if service:
                 try:
-                    return service.generate_response(messages, **kwargs)
+                    logger.info(f"🤖 Using LLM service: {service_name}")
+                    response = service.generate_response(messages, **kwargs)
+                    logger.info(f"✅ {service_name} response generated successfully")
+                    return response
                 except Exception as e:
                     logger.warning(f"Service {service_name} failed: {str(e)}")
         
@@ -209,7 +224,10 @@ class LLMServiceManager:
                 try:
                     service = self.get_service(fallback_service)
                     if service:
-                        return service.generate_response(messages, **kwargs)
+                        logger.info(f"🤖 Using fallback LLM service: {fallback_service}")
+                        response = service.generate_response(messages, **kwargs)
+                        logger.info(f"✅ {fallback_service} response generated successfully")
+                        return response
                 except Exception as e:
                     logger.warning(f"Fallback service {fallback_service} failed: {str(e)}")
                     continue

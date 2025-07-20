@@ -1,0 +1,49 @@
+{
+    "name": "Toolbox",
+    "path": "agents.toolbox",
+    "entrypoint": "toolbox_node",
+    "description": "Provides utility functions, tools, and helper capabilities for other agents",
+    "capabilities": [
+        "file_operations",
+        "text_processing",
+        "data_validation",
+        "format_conversion",
+        "system_integration"
+    ],
+    "inputs": {
+        "tool_request": "string",
+        "input_data": "object",
+        "tool_parameters": "object",
+        "context": "object"
+    },
+    "outputs": {
+        "tool_result": "object",
+        "processed_data": "object",
+        "validation_report": "object",
+        "tool_metadata": "object"
+    },
+    "allowed_actions": [
+        "execute_tool",
+        "process_data",
+        "validate_input",
+        "convert_format"
+    ],
+    "dependencies": [],
+    "available_tools": [
+        "file_reader",
+        "file_writer",
+        "text_analyzer",
+        "data_validator",
+        "format_converter",
+        "system_checker"
+    ],
+    "tool_categories": {
+        "file_ops": ["read", "write", "delete", "copy"],
+        "text_ops": ["parse", "extract", "transform", "validate"],
+        "system_ops": ["check", "monitor", "configure"]
+    },
+    "error_handling": {
+        "retry_attempts": 1,
+        "fallback_agent": "orchestrator"
+    }
+}

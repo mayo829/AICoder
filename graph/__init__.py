@@ -1,114 +1,178 @@
 """
-Graph Module
+Graph module for AICoder multi-agent system.
 
-LangGraph workflow management for the AICoder multi-agent system.
-Provides tools for building, configuring, and executing multi-agent workflows.
+This module provides LangGraph workflow creation and management capabilities
+for coordinating the multi-agent system.
 """
 
-from .langgraph_builder import (
-    AICoderGraphBuilder,
-    create_aicoder_workflow,
-    load_agent_nodes
-)
+from typing import Dict, Any, List, Optional
 
-# Try to import LangGraph components for convenience
 try:
-    import langgraph
-    from langgraph.graph import StateGraph, END
-    from langgraph.checkpoint.memory import MemorySaver
-    # ToolExecutor might not be available in all versions
-    try:
-        from langgraph.prebuilt import ToolExecutor
-    except ImportError:
-        ToolExecutor = None
+    from .langgraph_builder import AICoderGraphBuilder
     LANGGRAPH_AVAILABLE = True
-    print(f"✅ LangGraph imported successfully")
-except ImportError as e:
-    StateGraph = None
-    END = None
-    MemorySaver = None
-    ToolExecutor = None
+except ImportError:
     LANGGRAPH_AVAILABLE = False
-    print(f"❌ LangGraph import failed: {e}")
+    print("Warning: LangGraph not available. Install with: pip install langgraph")
 
-__all__ = [
-    # Main classes
-    "AICoderGraphBuilder",
-    
-    # Factory functions
-    "create_aicoder_workflow",
-    "load_agent_nodes",
-    
-    # LangGraph components (if available)
-    "StateGraph",
-    "END", 
-    "MemorySaver",
-    "ToolExecutor",
-    "LANGGRAPH_AVAILABLE"
-]
-
-# Version info
-__version__ = "1.0.0"
-
-def get_workflow_builder() -> AICoderGraphBuilder:
+def create_workflow_from_contracts(
+    workflow_type: str = "conditional",
+    start_agent: str = "orchestrator",
+    agents: List[str] = None,
+    enable_checkpointing: bool = False,
+    contracts_dir: str = "contracts"
+) -> Optional[Any]:
     """
-    Get a configured AICoderGraphBuilder instance.
+    Create a workflow using agent contracts.
+    
+    Args:
+        workflow_type: Type of workflow ("simple", "conditional")
+        start_agent: The agent to start the workflow
+        agents: List of agents to include (for simple workflow)
+        enable_checkpointing: Whether to enable checkpointing
+        contracts_dir: Directory containing agent contracts
     
     Returns:
-        Configured AICoderGraphBuilder
-    """
-    return AICoderGraphBuilder()
-
-def create_default_workflow() -> StateGraph:
-    """
-    Create the default AICoder workflow with all agents.
-    
-    Returns:
-        Configured StateGraph workflow
-        
-    Raises:
-        ImportError: If LangGraph is not installed
+        Compiled LangGraph workflow or None if unavailable
     """
     if not LANGGRAPH_AVAILABLE:
-        raise ImportError(
-            "LangGraph is required. Install with: pip install langgraph"
-        )
+        print("Error: LangGraph not available")
+        return None
     
-    return create_aicoder_workflow(
-        workflow_type="conditional",
-        enable_checkpointing=False
-    )
+    try:
+        builder = AICoderGraphBuilder(contracts_dir)
+        
+        if workflow_type == "simple":
+            workflow = builder.create_simple_workflow(agents)
+        elif workflow_type == "conditional":
+            workflow = builder.create_conditional_workflow(start_agent)
+        else:
+            print(f"Error: Unknown workflow type '{workflow_type}'")
+            return None
+        
+        if workflow and enable_checkpointing:
+            workflow = builder.add_checkpointing(workflow)
+        
+        return workflow
+        
+    except Exception as e:
+        print(f"Error creating workflow: {e}")
+        return None
 
-def validate_workflow_setup() -> dict:
+def get_available_agents(contracts_dir: str = "contracts") -> List[str]:
     """
-    Validate that the workflow can be created with all required components.
+    Get list of available agents from contracts.
+    
+    Args:
+        contracts_dir: Directory containing agent contracts
     
     Returns:
-        Validation results dictionary
+        List of available agent names
     """
-    builder = AICoderGraphBuilder()
+    if not LANGGRAPH_AVAILABLE:
+        return []
     
-    # Load nodes
-    nodes = builder.load_agent_nodes()
-    
-    # Create workflow
     try:
-        workflow = builder.create_conditional_workflow()
-        workflow_valid = True
-        workflow_error = None
+        builder = AICoderGraphBuilder(contracts_dir)
+        return builder.list_available_agents()
     except Exception as e:
-        workflow_valid = False
-        workflow_error = str(e)
+        print(f"Error loading agents: {e}")
+        return []
+
+def get_agent_config(agent_name: str, contracts_dir: str = "contracts") -> Optional[Dict[str, Any]]:
+    """
+    Get configuration for a specific agent.
     
-    # Validate
-    validation = builder.validate_workflow()
+    Args:
+        agent_name: Name of the agent
+        contracts_dir: Directory containing agent contracts
     
-    return {
-        "langgraph_available": LANGGRAPH_AVAILABLE,
-        "nodes_loaded": len(nodes),
-        "expected_nodes": 7,  # orchestrator, planner, enhancer, coder, tester, memory, toolbox
-        "workflow_valid": workflow_valid,
-        "workflow_error": workflow_error,
-        "validation": validation,
-        "ready": LANGGRAPH_AVAILABLE and workflow_valid and validation["valid"]
-    }
+    Returns:
+        Agent configuration or None if not found
+    """
+    if not LANGGRAPH_AVAILABLE:
+        return None
+    
+    try:
+        builder = AICoderGraphBuilder(contracts_dir)
+        return builder.get_agent_config(agent_name)
+    except Exception as e:
+        print(f"Error loading agent config: {e}")
+        return None
+
+def validate_workflow(workflow: Any) -> bool:
+    """
+    Validate a workflow configuration.
+    
+    Args:
+        workflow: The workflow to validate
+    
+    Returns:
+        True if valid, False otherwise
+    """
+    if not LANGGRAPH_AVAILABLE:
+        return False
+    
+    try:
+        builder = AICoderGraphBuilder()
+        return builder.validate_workflow(workflow)
+    except Exception as e:
+        print(f"Error validating workflow: {e}")
+        return False
+
+def get_workflow_info(workflow: Any, contracts_dir: str = "contracts") -> Dict[str, Any]:
+    """
+    Get information about a workflow.
+    
+    Args:
+        workflow: The workflow to analyze
+        contracts_dir: Directory containing agent contracts
+    
+    Returns:
+        Dictionary with workflow information
+    """
+    if not LANGGRAPH_AVAILABLE:
+        return {"error": "LangGraph not available"}
+    
+    try:
+        builder = AICoderGraphBuilder(contracts_dir)
+        return builder.get_workflow_info(workflow)
+    except Exception as e:
+        return {"error": f"Error getting workflow info: {e}"}
+
+# Factory functions for common workflow patterns
+def create_simple_workflow(agents: List[str] = None, contracts_dir: str = "contracts") -> Optional[Any]:
+    """Create a simple linear workflow."""
+    return create_workflow_from_contracts(
+        workflow_type="simple",
+        agents=agents,
+        contracts_dir=contracts_dir
+    )
+
+def create_orchestrator_workflow(contracts_dir: str = "contracts") -> Optional[Any]:
+    """Create a conditional workflow starting with orchestrator."""
+    return create_workflow_from_contracts(
+        workflow_type="conditional",
+        start_agent="orchestrator",
+        contracts_dir=contracts_dir
+    )
+
+def create_planner_workflow(contracts_dir: str = "contracts") -> Optional[Any]:
+    """Create a conditional workflow starting with planner."""
+    return create_workflow_from_contracts(
+        workflow_type="conditional",
+        start_agent="planner",
+        contracts_dir=contracts_dir
+    )
+
+# Export main classes and functions
+__all__ = [
+    "AICoderGraphBuilder",
+    "create_workflow_from_contracts",
+    "get_available_agents", 
+    "get_agent_config",
+    "validate_workflow",
+    "get_workflow_info",
+    "create_simple_workflow",
+    "create_orchestrator_workflow",
+    "create_planner_workflow"
+]

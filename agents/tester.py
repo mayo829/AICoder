@@ -152,6 +152,12 @@ def tester_node(state: Dict[str, Any]) -> Dict[str, Any]:
         # Run comprehensive testing
         test_results = run_comprehensive_tests(test_runner, generated_code, language, requirements)
         
+        # Log test results
+        logger.info("🧪 Tester Raw Output:")
+        logger.info("-" * 50)
+        logger.info(f"Test Results: {test_results}")
+        logger.info("-" * 50)
+        
         # Generate test recommendations
         recommendations = generate_test_recommendations(test_results, requirements)
         
@@ -162,7 +168,15 @@ def tester_node(state: Dict[str, Any]) -> Dict[str, Any]:
         updated_state["test_recommendations"] = recommendations
         updated_state["deployment_ready"] = test_results["overall_status"] == "pass"
         
-        logger.info("Testing completed successfully")
+        # Log testing summary
+        logger.info("🧪 Tester Summary:")
+        logger.info(f"  Overall Status: {test_results.get('overall_status', 'unknown')}")
+        logger.info(f"  Score: {test_results.get('score', 0.0)}")
+        logger.info(f"  Syntax Check: {test_results.get('syntax_check', {}).get('is_valid', False)}")
+        logger.info(f"  Code Quality Score: {test_results.get('code_quality', {}).get('score', 0.0)}")
+        logger.info(f"  Deployment Ready: {updated_state['deployment_ready']}")
+        
+        logger.info("✅ Testing completed successfully")
         return updated_state
         
     except Exception as e:

@@ -1,0 +1,34 @@
+{
+    "name": "Orchestrator",
+    "path": "agents.orchestrator",
+    "entrypoint": "orchestrator_node",
+    "description": "Coordinates workflow execution and manages state transitions between agents",
+    "capabilities": [
+        "workflow_coordination",
+        "state_management", 
+        "agent_routing",
+        "error_handling",
+        "checkpointing"
+    ],
+    "inputs": {
+        "user_input": "string",
+        "current_state": "object",
+        "agent_results": "object"
+    },
+    "outputs": {
+        "next_agent": "string",
+        "state_updates": "object",
+        "workflow_status": "string"
+    },
+    "allowed_actions": [
+        "route_to_agent",
+        "update_state",
+        "handle_error",
+        "save_checkpoint"
+    ],
+    "dependencies": ["planner", "coder", "tester", "memory"],
+    "error_handling": {
+        "retry_attempts": 3,
+        "fallback_agent": "memory"
+    }
+}

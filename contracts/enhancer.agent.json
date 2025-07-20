@@ -1,2 +1,37 @@
-# enhancer.py
-# This agent is responsible for enhancing the user prompt and user-in-loop interactions to ensure correct prompt is sent
+{
+    "name": "Enhancer",
+    "path": "agents.enhancer",
+    "entrypoint": "enhancer_node",
+    "description": "Enhances user prompts, optimizes code quality, and improves overall system performance",
+    "capabilities": [
+        "prompt_enhancement",
+        "code_optimization",
+        "performance_improvement",
+        "quality_refinement",
+        "user_experience_optimization"
+    ],
+    "inputs": {
+        "user_input": "string",
+        "generated_code": "string",
+        "performance_metrics": "object",
+        "quality_feedback": "object"
+    },
+    "outputs": {
+        "enhanced_input": "string",
+        "optimized_code": "string",
+        "improvement_suggestions": "array",
+        "quality_metrics": "object"
+    },
+    "allowed_actions": [
+        "enhance_prompts",
+        "optimize_code",
+        "improve_performance",
+        "refine_quality"
+    ],
+    "dependencies": ["tester", "memory"],
+    "optimization_targets": ["performance", "readability", "maintainability", "security"],
+    "error_handling": {
+        "retry_attempts": 2,
+        "fallback_agent": "orchestrator"
+    }
+}

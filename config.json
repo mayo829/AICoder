@@ -1,0 +1,54 @@
+{
+  "workflow_type": "simple",
+  "agents": ["planner", "coder", "tester"],
+  "output_format": "tsx",
+  "file_consistency_check": true,
+  "error_handling": "strict",
+  "max_retries": 3,
+  "save_intermediate_results": true,
+  "output_directory": "generated_code",
+  "logging_level": "INFO",
+  "agent_configs": {
+    "planner": {
+      "max_tokens": 2000,
+      "temperature": 0.7
+    },
+    "coder": {
+      "max_tokens": 4000,
+      "temperature": 0.3
+    },
+    "tester": {
+      "max_tokens": 1000,
+      "temperature": 0.5
+    }
+  },
+  "file_templates": {
+    "tsx": {
+      "main_file": "page.tsx",
+      "layout_file": "layout.tsx",
+      "globals_file": "globals.css",
+      "package_file": "package.json",
+      "tsconfig_file": "tsconfig.json",
+      "next_config": "next.config.js"
+    },
+    "typescript": {
+      "main_file": "index.ts",
+      "test_file": "index.test.ts",
+      "package_file": "package.json",
+      "readme_file": "README.md",
+      "tsconfig_file": "tsconfig.json"
+    },
+    "python": {
+      "main_file": "main.py",
+      "test_file": "test_main.py",
+      "requirements_file": "requirements.txt",
+      "readme_file": "README.md"
+    }
+  },
+  "validation_rules": {
+    "check_syntax": true,
+    "check_imports": true,
+    "check_unused_variables": false,
+    "check_function_definitions": true
+  }
+} 

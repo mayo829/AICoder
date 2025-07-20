@@ -1,0 +1,18 @@
+{
+  "memories": [
+    {
+      "id": "32bff9685b1e",
+      "timestamp": "2025-07-19T14:58:36.107150",
+      "project_id": "default",
+      "user_input": "Create a simple calculator application",
+      "context": "",
+      "agent_results": {},
+      "workflow_status": "",
+      "tags": [],
+      "importance": 0.5
+    }
+  ],
+  "metadata": {
+    "created": "2025-07-19T14:58:36.106969"
+  }
+}

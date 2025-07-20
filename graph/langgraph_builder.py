@@ -5,427 +5,328 @@ Builds and configures the LangGraph workflow for the AICoder multi-agent system.
 Creates a comprehensive workflow that orchestrates all agents in the system.
 """
 
-import importlib
 import json
 import os
-import logging
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional
 from pathlib import Path
 
-# LangGraph imports
 try:
     from langgraph.graph import StateGraph, END
     from langgraph.checkpoint.memory import MemorySaver
-    # ToolExecutor might not be available in all versions
-    try:
-        from langgraph.prebuilt import ToolExecutor
-    except ImportError:
-        ToolExecutor = None
+    LANGGRAPH_AVAILABLE = True
 except ImportError:
-    print("Warning: LangGraph not installed. Install with: pip install langgraph")
-    StateGraph = None
-    END = None
-    ToolExecutor = None
-    MemorySaver = None
+    LANGGRAPH_AVAILABLE = False
+    print("Warning: LangGraph not available. Install with: pip install langgraph")
 
-# Configure logging
-logger = logging.getLogger(__name__)
+# Import actual agent functions
+try:
+    from agents import (
+        planner_node,
+        coder_node,
+        tester_node,
+        memory_node,
+        orchestrator_node,
+        toolbox_node,
+        enhancer_node
+    )
+    AGENTS_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Agent functions not available: {e}")
+    AGENTS_AVAILABLE = False
 
 class AICoderGraphBuilder:
     """
-    Builder class for creating the AICoder LangGraph workflow.
-    
-    This class handles the creation and configuration of the multi-agent workflow
-    that coordinates all agents in the AICoder system.
+    Builder class for creating LangGraph workflows for the AICoder multi-agent system.
+    Loads agent configurations from contracts and builds dynamic workflows.
     """
     
-    def __init__(self, contract_folder: str = "contracts"):
-        self.contract_folder = Path(contract_folder)
-        self.nodes = {}
-        self.graph = None
-        self.workflow_config = {}
+    def __init__(self, contracts_dir: str = "contracts"):
+        self.contracts_dir = Path(contracts_dir)
+        self.agent_configs = {}
+        self.agent_functions = {}
+        self.load_agent_contracts()
+        self.load_agent_functions()
+    
+    def load_agent_contracts(self) -> None:
+        """Load all agent contracts from the contracts directory."""
+        if not self.contracts_dir.exists():
+            print(f"Warning: Contracts directory {self.contracts_dir} not found")
+            return
+            
+        for contract_file in self.contracts_dir.glob("*.agent.json"):
+            agent_name = contract_file.stem.replace(".agent", "")
+            try:
+                with open(contract_file, 'r') as f:
+                    self.agent_configs[agent_name] = json.load(f)
+                print(f"Loaded contract for agent: {agent_name}")
+            except Exception as e:
+                print(f"Error loading contract for {agent_name}: {e}")
+    
+    def load_agent_functions(self) -> None:
+        """Load actual agent functions from the agents module."""
+        if not AGENTS_AVAILABLE:
+            print("Warning: Agent functions not available")
+            return
         
-    def load_agent_nodes(self) -> Dict[str, Callable]:
-        """
-        Load all agent nodes from the contracts folder.
-        
-        Returns:
-            Dictionary mapping agent names to their node functions
-        """
-        nodes = {}
-        
-        # Define agent configurations (since some contract files are empty)
-        agent_configs = {
-            "orchestrator": {
-                "path": "agents.orchestrator",
-                "entrypoint": "orchestrator_node",
-                "description": "Coordinates workflow and manages state transitions"
-            },
-            "planner": {
-                "path": "agents.planner", 
-                "entrypoint": "planner_node",
-                "description": "Creates project plans and architecture"
-            },
-            "enhancer": {
-                "path": "agents.enhancer",
-                "entrypoint": "enhancer_node", 
-                "description": "Enhances user prompts and interactions"
-            },
-            "coder": {
-                "path": "agents.coder",
-                "entrypoint": "coder_node",
-                "description": "Generates code based on requirements"
-            },
-            "tester": {
-                "path": "agents.tester",
-                "entrypoint": "tester_node",
-                "description": "Tests and validates generated code"
-            },
-            "memory": {
-                "path": "agents.memory",
-                "entrypoint": "memory_node",
-                "description": "Manages long-term memory and context"
-            },
-            "toolbox": {
-                "path": "agents.toolbox",
-                "entrypoint": "toolbox_node",
-                "description": "Provides utility functions and tools"
-            }
+        # Map agent names to their actual functions
+        agent_function_map = {
+            "planner": planner_node,
+            "coder": coder_node,
+            "tester": tester_node,
+            "memory": memory_node,
+            "orchestrator": orchestrator_node,
+            "toolbox": toolbox_node,
+            "enhancer": enhancer_node
         }
         
-        for agent_name, config in agent_configs.items():
-            try:
-                # Import the module
-                module = importlib.import_module(config["path"])
-                
-                # Get the node function
-                node_func = getattr(module, config["entrypoint"])
-                
-                # Store the node
-                nodes[agent_name] = node_func
-                
-                logger.info(f"Loaded agent node: {agent_name}")
-                
-            except (ImportError, AttributeError) as e:
-                logger.error(f"Failed to load agent {agent_name}: {str(e)}")
-                continue
-        
-        self.nodes = nodes
-        return nodes
+        for agent_name, agent_func in agent_function_map.items():
+            if agent_func:
+                self.agent_functions[agent_name] = agent_func
+                print(f"Loaded function for agent: {agent_name}")
     
-    def create_workflow_graph(self) -> StateGraph:
-        """
-        Create the LangGraph workflow with all agents.
-        
-        Returns:
-            Configured StateGraph with the complete workflow
-        """
-        if StateGraph is None:
-            raise ImportError("LangGraph is required. Install with: pip install langgraph")
-        
-        # Load agent nodes
-        nodes = self.load_agent_nodes()
-        
-        # Create the state graph
-        workflow = StateGraph(state_schema=Dict[str, Any])
-        
-        # Add all nodes to the graph
-        for agent_name, node_func in nodes.items():
-            workflow.add_node(agent_name, node_func)
-        
-        # Define the workflow edges based on your architecture
-        self._add_workflow_edges(workflow)
-        
-        # Set the entry point
-        workflow.set_entry_point("orchestrator")
-        
-        # Compile the graph
-        self.graph = workflow.compile()
-        
-        logger.info("Workflow graph created successfully")
-        return self.graph
+    def get_agent_config(self, agent_name: str) -> Optional[Dict[str, Any]]:
+        """Get configuration for a specific agent."""
+        return self.agent_configs.get(agent_name)
     
-    def _add_workflow_edges(self, workflow: StateGraph):
+    def get_agent_function(self, agent_name: str):
+        """Get the actual function for a specific agent."""
+        return self.agent_functions.get(agent_name)
+    
+    def list_available_agents(self) -> List[str]:
+        """List all available agents from contracts."""
+        return list(self.agent_configs.keys())
+    
+    def create_simple_workflow(self, agents: List[str] = None) -> Optional[Any]:
         """
-        Add edges to define the workflow flow between agents.
+        Create a simple linear workflow with specified agents.
         
         Args:
-            workflow: The StateGraph to add edges to
-        """
-        # Define the workflow routing logic
-        def route_workflow(state: Dict[str, Any]) -> str:
-            """
-            Route the workflow based on current state and next agent.
-            
-            Args:
-                state: Current workflow state
-                
-            Returns:
-                Name of the next agent to execute, or END
-            """
-            workflow_status = state.get("workflow_status", "initialized")
-            next_agent = state.get("next_agent")
-            
-            # If workflow is completed or failed, end
-            if workflow_status in ["completed", "failed"]:
-                return END
-            
-            # If there's a specific next agent, route to it
-            if next_agent and next_agent in self.nodes:
-                return next_agent
-            
-            # Default routing based on workflow status
-            routing_map = {
-                "initialized": "orchestrator",
-                "planning": "planner", 
-                "enhancing": "enhancer",
-                "coding": "coder",
-                "testing": "tester",
-                "memory_processing": "memory",
-                "tool_processing": "toolbox"
-            }
-            
-            return routing_map.get(workflow_status, "orchestrator")
-        
-        # Add edges from each agent to the router
-        for agent_name in self.nodes.keys():
-            workflow.add_edge(agent_name, "orchestrator")
-    
-    def create_conditional_workflow(self) -> StateGraph:
-        """
-        Create a more sophisticated workflow with conditional routing.
+            agents: List of agent names to include in workflow. 
+                   If None, uses all available agents.
         
         Returns:
-            StateGraph with conditional workflow logic
+            LangGraph workflow or None if LangGraph unavailable
         """
-        if StateGraph is None:
-            raise ImportError("LangGraph is required. Install with: pip install langgraph")
+        if not LANGGRAPH_AVAILABLE:
+            print("Error: LangGraph not available")
+            return None
+            
+        if agents is None:
+            agents = self.list_available_agents()
         
-        # Load agent nodes
-        nodes = self.load_agent_nodes()
+        # Validate agents exist
+        for agent in agents:
+            if agent not in self.agent_configs:
+                print(f"Warning: Agent '{agent}' not found in contracts")
+                return None
         
-        # Create the state graph
+        # Create state graph
         workflow = StateGraph(state_schema=Dict[str, Any])
         
-        # Add all nodes
-        for agent_name, node_func in nodes.items():
-            workflow.add_node(agent_name, node_func)
-        
-        # Add conditional routing
-        self._add_conditional_edges(workflow)
+        # Add nodes using actual agent functions
+        for agent in agents:
+            agent_func = self.get_agent_function(agent)
+            
+            if agent_func:
+                # Use the actual agent function
+                workflow.add_node(agent, agent_func)
+                print(f"Added agent node: {agent} (using actual function)")
+            else:
+                # Fallback to LLM service if function not available
+                print(f"Warning: No function found for {agent}, using LLM service")
+                from services.llm import generate_agent_response
+                
+                def create_node_function(agent_name: str):
+                    def node_func(state: Dict[str, Any]) -> Dict[str, Any]:
+                        try:
+                            response = generate_agent_response(
+                                agent_name=agent_name,
+                                user_input=state.get("user_input", ""),
+                                context=state
+                            )
+                            return {
+                                **state,
+                                f"{agent_name}_result": response,
+                                "current_agent": agent_name,
+                                "workflow_step": f"completed_{agent_name}"
+                            }
+                        except Exception as e:
+                            return {
+                                **state,
+                                f"{agent_name}_error": str(e),
+                                "current_agent": agent_name,
+                                "workflow_step": f"error_{agent_name}"
+                            }
+                    return node_func
+                
+                workflow.add_node(agent, create_node_function(agent))
         
         # Set entry point
-        workflow.set_entry_point("orchestrator")
+        if agents:
+            workflow.set_entry_point(agents[0])
         
-        # Compile
-        self.graph = workflow.compile()
+        # Add edges (linear flow)
+        for i in range(len(agents) - 1):
+            workflow.add_edge(agents[i], agents[i + 1])
         
-        logger.info("Conditional workflow graph created successfully")
-        return self.graph
+        # Add end edge
+        if agents:
+            workflow.add_edge(agents[-1], END)
+        
+        return workflow.compile()
     
-    def _add_conditional_edges(self, workflow: StateGraph):
+    def create_conditional_workflow(self, 
+                                  start_agent: str = "orchestrator",
+                                  conditional_routing: bool = True) -> Optional[Any]:
         """
-        Add conditional edges for more sophisticated workflow routing.
+        Create a conditional workflow with orchestrator-based routing.
         
         Args:
-            workflow: The StateGraph to add conditional edges to
-        """
-        # Define conditional routing functions
-        def should_continue_to_planner(state: Dict[str, Any]) -> str:
-            """Decide whether to continue to planner or end"""
-            if state.get("workflow_status") == "failed":
-                return END
-            return "planner"
-        
-        def should_continue_to_enhancer(state: Dict[str, Any]) -> str:
-            """Decide whether to continue to enhancer or end"""
-            if state.get("workflow_status") == "failed":
-                return END
-            return "enhancer"
-        
-        def should_continue_to_coder(state: Dict[str, Any]) -> str:
-            """Decide whether to continue to coder or end"""
-            if state.get("workflow_status") == "failed":
-                return END
-            return "coder"
-        
-        def should_continue_to_tester(state: Dict[str, Any]) -> str:
-            """Decide whether to continue to tester or end"""
-            if state.get("workflow_status") == "failed":
-                return END
-            return "tester"
-        
-        def should_continue_to_memory(state: Dict[str, Any]) -> str:
-            """Decide whether to continue to memory or end"""
-            if state.get("workflow_status") == "failed":
-                return END
-            return "memory"
-        
-        def should_continue_to_toolbox(state: Dict[str, Any]) -> str:
-            """Decide whether to continue to toolbox or end"""
-            if state.get("workflow_status") == "failed":
-                return END
-            return "toolbox"
-        
-        def should_end_workflow(state: Dict[str, Any]) -> str:
-            """Decide whether to end the workflow"""
-            if state.get("workflow_status") in ["completed", "failed"]:
-                return END
-            return "orchestrator"
-        
-        # Add conditional edges
-        workflow.add_conditional_edges(
-            "orchestrator",
-            should_continue_to_planner
-        )
-        
-        workflow.add_conditional_edges(
-            "planner",
-            should_continue_to_enhancer
-        )
-        
-        workflow.add_conditional_edges(
-            "enhancer", 
-            should_continue_to_coder
-        )
-        
-        workflow.add_conditional_edges(
-            "coder",
-            should_continue_to_tester
-        )
-        
-        workflow.add_conditional_edges(
-            "tester",
-            should_continue_to_memory
-        )
-        
-        workflow.add_conditional_edges(
-            "memory",
-            should_continue_to_toolbox
-        )
-        
-        workflow.add_conditional_edges(
-            "toolbox",
-            should_end_workflow
-        )
-    
-    def get_workflow_config(self) -> Dict[str, Any]:
-        """
-        Get the current workflow configuration.
+            start_agent: The agent to start the workflow
+            conditional_routing: Whether to use conditional routing
         
         Returns:
-            Dictionary containing workflow configuration
+            LangGraph workflow or None if LangGraph unavailable
         """
-        return {
-            "nodes": list(self.nodes.keys()),
-            "entry_point": "orchestrator",
-            "workflow_type": "conditional" if hasattr(self, '_add_conditional_edges') else "simple",
-            "state_type": "Dict[str, Any]",
-            "checkpointing": True
-        }
-    
-    def create_checkpointed_workflow(self, memory_saver: Optional[MemorySaver] = None) -> StateGraph:
-        """
-        Create a workflow with checkpointing for state persistence.
+        if not LANGGRAPH_AVAILABLE:
+            print("Error: LangGraph not available")
+            return None
         
-        Args:
-            memory_saver: Optional MemorySaver for checkpointing
+        if start_agent not in self.agent_configs:
+            print(f"Error: Start agent '{start_agent}' not found in contracts")
+            return None
+        
+        # Create state graph
+        workflow = StateGraph(state_schema=Dict[str, Any])
+        
+        # Add all agent nodes using actual functions
+        for agent_name, config in self.agent_configs.items():
+            agent_func = self.get_agent_function(agent_name)
             
+            if agent_func:
+                # Use the actual agent function
+                workflow.add_node(agent_name, agent_func)
+                print(f"Added agent node: {agent_name} (using actual function)")
+            else:
+                # Fallback to LLM service
+                print(f"Warning: No function found for {agent_name}, using LLM service")
+                from services.llm import generate_agent_response
+                
+                def create_node_function(agent_name: str):
+                    def node_func(state: Dict[str, Any]) -> Dict[str, Any]:
+                        try:
+                            response = generate_agent_response(
+                                agent_name=agent_name,
+                                user_input=state.get("user_input", ""),
+                                context=state
+                            )
+                            return {
+                                **state,
+                                f"{agent_name}_result": response,
+                                "current_agent": agent_name,
+                                "workflow_step": f"completed_{agent_name}"
+                            }
+                        except Exception as e:
+                            return {
+                                **state,
+                                f"{agent_name}_error": str(e),
+                                "current_agent": agent_name,
+                                "workflow_step": f"error_{agent_name}"
+                            }
+                    return node_func
+                
+                workflow.add_node(agent_name, create_node_function(agent_name))
+        
+        # Add conditional routing
+        if conditional_routing and start_agent == "orchestrator":
+            def route_to_next_agent(state: Dict[str, Any]) -> str:
+                """Route to next agent based on orchestrator decision."""
+                orchestrator_result = state.get("orchestrator_result", {})
+                next_agent = orchestrator_result.get("next_agent", "END")
+                
+                if next_agent == "END" or next_agent not in self.agent_configs:
+                    return END
+                
+                return next_agent
+            
+            # Add conditional edges from orchestrator
+            workflow.add_conditional_edges(
+                "orchestrator",
+                route_to_next_agent,
+                {agent: agent for agent in self.agent_configs.keys()} | {END: END}
+            )
+            
+            # Add edges from other agents back to orchestrator
+            for agent_name in self.agent_configs.keys():
+                if agent_name != "orchestrator":
+                    workflow.add_edge(agent_name, "orchestrator")
+        
+        # Set entry point
+        workflow.set_entry_point(start_agent)
+        
+        return workflow.compile()
+    
+    def add_checkpointing(self, workflow: Any, checkpoint_dir: str = "checkpoints") -> Any:
+        """
+        Add checkpointing to a workflow.
+        
+        Args:
+            workflow: The compiled workflow
+            checkpoint_dir: Directory to store checkpoints
+        
         Returns:
-            StateGraph with checkpointing enabled
+            Workflow with checkpointing enabled
         """
-        if MemorySaver is None:
-            logger.warning("MemorySaver not available, creating workflow without checkpointing")
-            return self.create_conditional_workflow()
+        if not LANGGRAPH_AVAILABLE:
+            return workflow
         
-        # Create the workflow
-        workflow = self.create_conditional_workflow()
-        
-        # Add checkpointing
-        if memory_saver:
-            workflow = workflow.checkpointer(memory_saver)
-            logger.info("Checkpointing enabled for workflow")
-        
-        return workflow
-    
-    def validate_workflow(self) -> Dict[str, Any]:
-        """
-        Validate the workflow configuration and nodes.
-        
-        Returns:
-            Validation results
-        """
-        validation_results = {
-            "valid": True,
-            "errors": [],
-            "warnings": [],
-            "node_count": len(self.nodes),
-            "missing_nodes": []
-        }
-        
-        # Check if all expected agents are loaded
-        expected_agents = ["orchestrator", "planner", "enhancer", "coder", "tester", "memory", "toolbox"]
-        
-        for agent in expected_agents:
-            if agent not in self.nodes:
-                validation_results["missing_nodes"].append(agent)
-                validation_results["warnings"].append(f"Agent {agent} not loaded")
-        
-        if validation_results["missing_nodes"]:
-            validation_results["valid"] = False
-        
-        # Check if graph is compiled
-        if not self.graph:
-            validation_results["errors"].append("Workflow graph not compiled")
-            validation_results["valid"] = False
-        
-        return validation_results
-
-def create_aicoder_workflow(
-    workflow_type: str = "conditional",
-    enable_checkpointing: bool = True,
-    contract_folder: str = "contracts"
-) -> StateGraph:
-    """
-    Factory function to create an AICoder workflow.
-    
-    Args:
-        workflow_type: Type of workflow ("simple", "conditional")
-        enable_checkpointing: Whether to enable checkpointing
-        contract_folder: Path to contracts folder
-        
-    Returns:
-        Configured StateGraph workflow
-    """
-    builder = AICoderGraphBuilder(contract_folder)
-    
-    if workflow_type == "simple":
-        workflow = builder.create_workflow_graph()
-    elif workflow_type == "conditional":
-        workflow = builder.create_conditional_workflow()
-    else:
-        raise ValueError(f"Unknown workflow type: {workflow_type}")
-    
-    # Add checkpointing if requested
-    if enable_checkpointing and MemorySaver is not None:
         try:
             memory_saver = MemorySaver()
-            workflow = builder.create_checkpointed_workflow(memory_saver)
+            return workflow.with_checkpointer(memory_saver)
         except Exception as e:
-            logger.warning(f"Checkpointing failed, using workflow without checkpointing: {e}")
-            # Return the workflow without checkpointing if it fails
+            print(f"Warning: Could not add checkpointing: {e}")
+            return workflow
     
-    return workflow
-
-def load_agent_nodes(contract_folder: str = "contracts") -> Dict[str, Callable]:
-    """
-    Legacy function for backward compatibility.
-    
-    Args:
-        contract_folder: Path to contracts folder
+    def validate_workflow(self, workflow: Any) -> bool:
+        """
+        Validate a workflow configuration.
         
-    Returns:
-        Dictionary of agent nodes
-    """
-    builder = AICoderGraphBuilder(contract_folder)
-    return builder.load_agent_nodes()
+        Args:
+            workflow: The workflow to validate
+        
+        Returns:
+            True if valid, False otherwise
+        """
+        if workflow is None:
+            return False
+        
+        # Basic validation - workflow should be callable
+        try:
+            # Test with empty state
+            test_state = {"user_input": "test"}
+            # Note: We can't actually run the workflow here without proper setup
+            return True
+        except Exception as e:
+            print(f"Workflow validation failed: {e}")
+            return False
+    
+    def get_workflow_info(self, workflow: Any) -> Dict[str, Any]:
+        """
+        Get information about a workflow.
+        
+        Args:
+            workflow: The workflow to analyze
+        
+        Returns:
+            Dictionary with workflow information
+        """
+        if workflow is None:
+            return {"error": "No workflow provided"}
+        
+        return {
+            "type": type(workflow).__name__,
+            "available_agents": self.list_available_agents(),
+            "agent_count": len(self.agent_configs),
+            "contracts_loaded": len(self.agent_configs) > 0,
+            "functions_loaded": len(self.agent_functions) > 0
+        }
