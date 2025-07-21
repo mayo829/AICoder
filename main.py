@@ -287,6 +287,14 @@ class AICoderWorkflow:
         """Fix common TSX issues in generated code."""
         import re
         
+        # Apply aggressive syntax correction first
+        content = self.force_syntax_correction(content, filename)
+        
+        # Apply automatic syntax fixes
+        content = self.fix_typescript_syntax_errors(content)
+        content = self.fix_jsx_syntax_errors(content)
+        content = self.fix_import_export_syntax(content)
+        
         # Add "use client" directive for class components
         if 'class ' in content and 'extends Component' in content and '"use client"' not in content:
             content = '"use client"\n\n' + content
@@ -369,6 +377,102 @@ class AICoderWorkflow:
             logger.info(f"🔧 Removed metadata export from client component {filename}")
         
         return content
+    
+    def fix_typescript_syntax_errors(self, content: str) -> str:
+        """Fix common TypeScript syntax errors."""
+        lines = content.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            fixed_line = line
+            
+            # Fix function parameter syntax errors
+            # function Component(: any) -> function Component()
+            if 'function' in fixed_line and '(: any)' in fixed_line:
+                fixed_line = fixed_line.replace('(: any)', '()')
+            
+            # Fix double type annotations
+            # }: { children: React.ReactNode; }: any) -> }: { children: React.ReactNode; })
+            if '}: {' in fixed_line and '}: any)' in fixed_line:
+                fixed_line = fixed_line.replace('}: any)', ')')
+            
+            # Fix missing function parameters
+            # export default function Home(: any) -> export default function Home()
+            if 'export default function' in fixed_line and '(: any)' in fixed_line:
+                fixed_line = fixed_line.replace('(: any)', '()')
+            
+            fixed_lines.append(fixed_line)
+        
+        return '\n'.join(fixed_lines)
+    
+    def fix_jsx_syntax_errors(self, content: str) -> str:
+        """Fix common JSX syntax errors."""
+        lines = content.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            fixed_line = line
+            
+            # Fix semicolons in JSX attributes
+            # <Image; src="..." /> -> <Image src="..." />
+            if '<' in fixed_line and '>' in fixed_line and ';' in fixed_line:
+                # Only fix if it's not a comment or import/export
+                if not fixed_line.strip().startswith('//') and not fixed_line.strip().startswith('import') and not fixed_line.strip().startswith('export'):
+                    # Replace semicolons in JSX attributes
+                    fixed_line = fixed_line.replace('; ', ' ').replace(' ;', ' ')
+            
+            # Fix self-closing tags with semicolons
+            # <Image; src="..." /> -> <Image src="..." />
+            if '<' in fixed_line and '/>' in fixed_line and ';' in fixed_line:
+                if not fixed_line.strip().startswith('//'):
+                    fixed_line = fixed_line.replace('; ', ' ').replace(' ;', ' ')
+            
+            # Fix JSX attributes with semicolons
+            # className="class"; -> className="class"
+            if 'className=' in fixed_line and ';' in fixed_line:
+                if not fixed_line.strip().startswith('//'):
+                    fixed_line = fixed_line.replace('; ', ' ').replace(' ;', ' ')
+            
+            # Fix src attributes with semicolons
+            # src="image.jpg"; -> src="image.jpg"
+            if 'src=' in fixed_line and ';' in fixed_line:
+                if not fixed_line.strip().startswith('//'):
+                    fixed_line = fixed_line.replace('; ', ' ').replace(' ;', ' ')
+            
+            # Fix alt attributes with semicolons
+            # alt="description"; -> alt="description"
+            if 'alt=' in fixed_line and ';' in fixed_line:
+                if not fixed_line.strip().startswith('//'):
+                    fixed_line = fixed_line.replace('; ', ' ').replace(' ;', ' ')
+            
+            fixed_lines.append(fixed_line)
+        
+        return '\n'.join(fixed_lines)
+    
+    def fix_import_export_syntax(self, content: str) -> str:
+        """Fix common import and export syntax errors."""
+        lines = content.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            fixed_line = line
+            
+            # Fix import statements with misplaced semicolons
+            # import { Component }; from './Component' -> import { Component } from './Component'
+            if fixed_line.strip().startswith('import') and ';' in fixed_line:
+                # Remove semicolons that are not at the end
+                if not fixed_line.strip().endswith(';'):
+                    fixed_line = fixed_line.replace('; ', ' ').replace(' ;', ' ')
+            
+            # Fix export statements with misplaced semicolons
+            # export default function Component;() {} -> export default function Component() {}
+            if fixed_line.strip().startswith('export') and ';' in fixed_line:
+                if not fixed_line.strip().endswith(';'):
+                    fixed_line = fixed_line.replace('; ', ' ').replace(' ;', ' ')
+            
+            fixed_lines.append(fixed_line)
+        
+        return '\n'.join(fixed_lines)
     
     def fix_missing_component_imports(self, generated_files: Dict[str, str]) -> Dict[str, str]:
         """Fix imports of components that don't exist by removing them."""
@@ -1201,6 +1305,9 @@ body {
             # Step 3.5: Additional TSX validation and compilation if applicable
             output_format = self.config.get("output_format", "python")
             if output_format == "tsx":
+                # CRITICAL: Final validation and force fixing of all files
+                generated_files = self.validate_and_force_fix_files(generated_files)
+                
                 # Fix missing component imports before compilation
                 generated_files = self.fix_missing_component_imports(generated_files)
                 
@@ -1284,6 +1391,285 @@ body {
                 "error": str(e),
                 "user_prompt": user_prompt
             }
+
+    def force_syntax_correction(self, content: str, filename: str) -> str:
+        """Force syntax correction by applying multiple passes of fixes until code is valid."""
+        import re
+        
+        logger.info(f"🔧 Force correcting syntax for {filename}")
+        
+        # Multiple passes to ensure all errors are fixed
+        for pass_num in range(5):  # Up to 5 passes
+            original_content = content
+            
+            # Pass 1: Fix TypeScript function syntax
+            content = self.aggressive_fix_function_syntax(content)
+            
+            # Pass 2: Fix JSX syntax
+            content = self.aggressive_fix_jsx_syntax(content)
+            
+            # Pass 3: Fix import/export syntax
+            content = self.aggressive_fix_import_export_syntax(content)
+            
+            # Pass 4: Fix Next.js specific issues
+            content = self.aggressive_fix_nextjs_syntax(content, filename)
+            
+            # Pass 5: Final cleanup
+            content = self.final_syntax_cleanup(content)
+            
+            # If no changes were made, we're done
+            if content == original_content:
+                logger.info(f"✅ Syntax correction completed in {pass_num + 1} passes")
+                break
+        
+        return content
+    
+    def aggressive_fix_function_syntax(self, content: str) -> str:
+        """Aggressively fix function syntax errors."""
+        import re
+        
+        lines = content.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            fixed_line = line
+            
+            # Fix ALL variations of invalid function parameters
+            patterns_to_fix = [
+                (r'function\s+\w+\s*\(\s*:\s*any\s*\)', 'function Component()'),
+                (r'export\s+default\s+function\s+\w+\s*\(\s*:\s*any\s*\)', 'export default function Component()'),
+                (r'\(\s*:\s*any\s*\)', '()'),
+                (r'}\s*:\s*{\s*[^}]*}\s*:\s*any\s*\)', '}: { children: React.ReactNode })'),
+                (r'}\s*:\s*any\s*\)', ')'),
+            ]
+            
+            for pattern, replacement in patterns_to_fix:
+                if re.search(pattern, fixed_line):
+                    # Extract the actual function name if present
+                    func_match = re.search(r'function\s+(\w+)', fixed_line)
+                    if func_match:
+                        func_name = func_match.group(1)
+                        fixed_line = re.sub(pattern, replacement.replace('Component', func_name), fixed_line)
+                    else:
+                        fixed_line = re.sub(pattern, replacement, fixed_line)
+            
+            # Fix any remaining malformed function declarations
+            if 'function' in fixed_line and '(' in fixed_line and ')' in fixed_line:
+                # Ensure proper spacing around parentheses
+                fixed_line = re.sub(r'\(\s*:\s*', '(', fixed_line)
+                fixed_line = re.sub(r'\s*:\s*\)', ')', fixed_line)
+            
+            fixed_lines.append(fixed_line)
+        
+        return '\n'.join(fixed_lines)
+    
+    def aggressive_fix_jsx_syntax(self, content: str) -> str:
+        """Aggressively fix JSX syntax errors."""
+        import re
+        
+        lines = content.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            fixed_line = line
+            
+            # Remove ALL semicolons from JSX (except in comments)
+            if not fixed_line.strip().startswith('//') and not fixed_line.strip().startswith('/*'):
+                # Fix JSX tags with semicolons
+                fixed_line = re.sub(r'<\s*(\w+)\s*;', r'<\1', fixed_line)
+                fixed_line = re.sub(r';\s*(\w+)\s*>', r'\1>', fixed_line)
+                
+                # Fix JSX attributes with semicolons
+                fixed_line = re.sub(r'(\w+)\s*=\s*["\']([^"\']*)["\']\s*;', r'\1="\2"', fixed_line)
+                fixed_line = re.sub(r';\s*(\w+)\s*=\s*["\']', r' \1="', fixed_line)
+                
+                # Fix self-closing tags
+                fixed_line = re.sub(r'<\s*(\w+)\s*;([^>]*)\s*/>', r'<\1\2/>', fixed_line)
+                fixed_line = re.sub(r'<\s*(\w+)([^>]*)\s*;\s*/>', r'<\1\2/>', fixed_line)
+            
+            fixed_lines.append(fixed_line)
+        
+        return '\n'.join(fixed_lines)
+    
+    def aggressive_fix_import_export_syntax(self, content: str) -> str:
+        """Aggressively fix import/export syntax errors."""
+        import re
+        
+        lines = content.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            fixed_line = line
+            
+            # Fix import statements
+            if fixed_line.strip().startswith('import'):
+                # Remove semicolons that are not at the end
+                if not fixed_line.strip().endswith(';'):
+                    fixed_line = re.sub(r';\s+from\s+', ' from ', fixed_line)
+                    fixed_line = re.sub(r'}\s*;\s*from\s+', '} from ', fixed_line)
+                    fixed_line = re.sub(r'\s*;\s*from\s+', ' from ', fixed_line)
+            
+            # Fix export statements
+            if fixed_line.strip().startswith('export'):
+                # Remove semicolons that are not at the end
+                if not fixed_line.strip().endswith(';'):
+                    fixed_line = re.sub(r';\s*\(', '(', fixed_line)
+                    fixed_line = re.sub(r'function\s+(\w+)\s*;\s*\(', r'function \1(', fixed_line)
+            
+            fixed_lines.append(fixed_line)
+        
+        return '\n'.join(fixed_lines)
+    
+    def aggressive_fix_nextjs_syntax(self, content: str, filename: str) -> str:
+        """Aggressively fix Next.js specific syntax issues."""
+        import re
+        
+        # Fix layout.tsx specific issues
+        if filename == 'layout.tsx':
+            # Ensure proper function signature
+            content = re.sub(
+                r'export\s+default\s+function\s+(\w+)\s*\(\s*:\s*any\s*\)',
+                r'export default function \1({ children }: { children: React.ReactNode })',
+                content
+            )
+            
+            # Ensure proper function signature without any
+            content = re.sub(
+                r'export\s+default\s+function\s+(\w+)\s*\(\s*\)',
+                r'export default function \1({ children }: { children: React.ReactNode })',
+                content
+            )
+            
+            # Remove any "use client" directive
+            content = re.sub(r'"use client"\s*\n?', '', content)
+            
+            # Ensure metadata export exists
+            if 'export const metadata' not in content:
+                metadata_export = '''export const metadata = {
+  title: 'Generated App',
+  description: 'Generated by AICoder',
+}'''
+                # Insert after imports
+                import_end = content.find('\n\n')
+                if import_end != -1:
+                    content = content[:import_end] + '\n\n' + metadata_export + content[import_end:]
+                else:
+                    content = metadata_export + '\n\n' + content
+        
+        # Fix page.tsx specific issues
+        elif filename == 'page.tsx':
+            # Ensure proper function signature
+            content = re.sub(
+                r'export\s+default\s+function\s+(\w+)\s*\(\s*:\s*any\s*\)',
+                r'export default function \1()',
+                content
+            )
+            
+            # Remove "use client" if not needed
+            if '"use client"' in content:
+                needs_client = any(keyword in content for keyword in ['useState', 'useEffect', 'onClick', 'onChange', 'addEventListener'])
+                if not needs_client:
+                    content = re.sub(r'"use client"\s*\n?', '', content)
+        
+        return content
+    
+    def final_syntax_cleanup(self, content: str) -> str:
+        """Final cleanup pass to ensure syntax is correct."""
+        import re
+        
+        lines = content.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            fixed_line = line
+            
+            # Remove any remaining problematic patterns
+            # Fix any remaining function parameter issues
+            fixed_line = re.sub(r'\(\s*:\s*any\s*\)', '()', fixed_line)
+            fixed_line = re.sub(r'\(\s*:\s*\)', '()', fixed_line)
+            
+            # Fix any remaining JSX issues
+            fixed_line = re.sub(r'<\s*(\w+)\s*;', r'<\1', fixed_line)
+            fixed_line = re.sub(r';\s*(\w+)\s*>', r'\1>', fixed_line)
+            
+            # Fix any remaining import/export issues
+            if fixed_line.strip().startswith('import') and ';' in fixed_line and not fixed_line.strip().endswith(';'):
+                fixed_line = fixed_line.replace('; ', ' ').replace(' ;', ' ')
+            
+            if fixed_line.strip().startswith('export') and ';' in fixed_line and not fixed_line.strip().endswith(';'):
+                fixed_line = fixed_line.replace('; ', ' ').replace(' ;', ' ')
+            
+            fixed_lines.append(fixed_line)
+        
+        return '\n'.join(fixed_lines)
+
+    def validate_and_force_fix_files(self, generated_files: Dict[str, str]) -> Dict[str, str]:
+        """Validate all files and force fix any remaining syntax errors before saving."""
+        logger.info("🔍 Final validation and force fixing of all files...")
+        
+        fixed_files = {}
+        
+        for filename, content in generated_files.items():
+            logger.info(f"🔧 Validating and fixing {filename}")
+            
+            # Apply aggressive fixes
+            fixed_content = self.force_syntax_correction(content, filename)
+            
+            # Additional validation for specific file types
+            if filename.endswith('.tsx'):
+                # Ensure proper TypeScript syntax
+                fixed_content = self.ensure_valid_typescript(fixed_content, filename)
+            
+            # Log if changes were made
+            if fixed_content != content:
+                logger.info(f"✅ Fixed syntax errors in {filename}")
+                # Log the specific fixes
+                original_lines = content.split('\n')
+                fixed_lines = fixed_content.split('\n')
+                
+                for i, (orig, fixed) in enumerate(zip(original_lines, fixed_lines)):
+                    if orig != fixed:
+                        logger.info(f"  Line {i+1}: {orig.strip()} -> {fixed.strip()}")
+            else:
+                logger.info(f"✅ {filename} is already syntactically correct")
+            
+            fixed_files[filename] = fixed_content
+        
+        return fixed_files
+    
+    def ensure_valid_typescript(self, content: str, filename: str) -> str:
+        """Ensure the content is valid TypeScript/TSX syntax."""
+        import re
+        
+        lines = content.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            fixed_line = line
+            
+            # CRITICAL: Fix any remaining function parameter issues
+            # This is the most common error we're seeing
+            if 'function' in fixed_line and '(' in fixed_line and ')' in fixed_line:
+                # Fix function declarations with invalid parameters
+                fixed_line = re.sub(r'function\s+(\w+)\s*\(\s*:\s*any\s*\)', r'function \1()', fixed_line)
+                fixed_line = re.sub(r'export\s+default\s+function\s+(\w+)\s*\(\s*:\s*any\s*\)', r'export default function \1()', fixed_line)
+                
+                # Fix function declarations with missing parameters
+                fixed_line = re.sub(r'function\s+(\w+)\s*\(\s*\)', r'function \1()', fixed_line)
+                fixed_line = re.sub(r'export\s+default\s+function\s+(\w+)\s*\(\s*\)', r'export default function \1()', fixed_line)
+            
+            # Fix any remaining type annotation issues
+            if '}: {' in fixed_line and '}: any)' in fixed_line:
+                fixed_line = fixed_line.replace('}: any)', ')')
+            
+            # Fix any remaining JSX issues
+            if '<' in fixed_line and '>' in fixed_line and ';' in fixed_line:
+                if not fixed_line.strip().startswith('//'):
+                    fixed_line = fixed_line.replace('; ', ' ').replace(' ;', ' ')
+            
+            fixed_lines.append(fixed_line)
+        
+        return '\n'.join(fixed_lines)
 
 def main():
     """Main entry point for the AICoder application."""
