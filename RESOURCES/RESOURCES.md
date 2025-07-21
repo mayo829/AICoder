@@ -4,6 +4,10 @@
  - tool use (see 'Best practices for tool definitions'): https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use
 
 
+## LangGraph
+ - API references: https://langchain-ai.github.io/langgraph/reference/
+
+
 ## Other
 Command for Creating a new project: npx create-next-app@latest my-new-website --yes --typescript --tailwind --eslint --app --src-dir --import-alias "@/*"
 
@@ -15,6 +19,8 @@ Paste this stuff into chatgpt to make it better lol
 
  - Roles: full-stack dev
  - research: multi-agent systems
- - services used: langgraph/claude/selenium/supabase/
- - languages and frameworks: typescript, node.js, 
- - Others: api routing
+ - LLMS: Claude, GPT-4
+ - services used: selenium, supabase, ngrok
+ - languages: typescript, 
+ - frameworks: node.js, langgraph
+ - Others: api routing, service hosting
