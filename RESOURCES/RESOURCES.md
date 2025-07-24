@@ -23,4 +23,4 @@ Paste this stuff into chatgpt to make it better lol
  - services used: selenium, supabase, ngrok
  - languages: typescript, 
  - frameworks: node.js, langgraph
- - Others: api routing, service hosting
+ - Others: api routing, service hosting, Tkintercad, 3d-printing (motion activated alarm system)
